@@ -80,7 +80,7 @@
     <video id="webcam" autoplay playsinline class="hidden"></video>
     <canvas id="canvas" class="hidden"></canvas>
 
-    <!-- KROK 2: ŠIFROVANÝ CHAT (Optimalizovaný flexibilní layout pro prsty a gesta) -->
+    <!-- KROK 2: ŠIFROVANÝ CHAT -->
     <div id="chat-screen" class="hidden flex-1 flex flex-col h-[100dvh] md:h-full max-w-7xl mx-auto w-full p-4 overflow-y-auto md:overflow-hidden">
         <!-- Záhlaví -->
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-gray-800">
@@ -157,7 +157,7 @@
             </div>
         </div>
 
-        <!-- ZÁLOŽKA: WEB KAMERY (Grid s kamerami jako při video callu) -->
+        <!-- ZÁLOŽKA: WEB KAMERY -->
         <div id="admin-cameras-view" class="hidden">
             <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
                 <!-- Adminův lokální náhled (Admin vidí sám sebe) -->
@@ -170,6 +170,34 @@
                 </div>
                 <!-- Kamery ostatních uživatelů -->
                 <div id="remote-cameras-grid" class="contents"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DIAGNOSTICKÝ PANEL (POMOCNÍK PŘI CHYBÁCH FIREBASE) -->
+    <div id="debug-panel" class="bg-gray-950 border-t border-yellow-600/30 text-xs p-3 font-mono text-gray-300 w-full select-text">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+            <div class="flex flex-wrap items-center gap-4">
+                <span class="font-bold text-yellow-500">DIAGNOSTIKA:</span>
+                <span id="status-auth" class="text-gray-500">● Ověřování: Neaktivní</span>
+                <span id="status-firestore" class="text-gray-500">● Firestore: Odpojeno</span>
+            </div>
+            <button id="toggle-debug-details" class="text-blue-400 hover:underline focus:outline-none">Zobrazit nápovědu k nastavení</button>
+        </div>
+        <div id="debug-details" class="hidden max-w-7xl mx-auto mt-3 pt-3 border-t border-gray-800 space-y-2">
+            <div class="bg-red-950/40 text-red-200 p-3 rounded border border-red-800/50 hidden" id="debug-error-box">
+                <p class="font-bold mb-1">Zachycená chyba Firebase:</p>
+                <div id="debug-error-text" class="whitespace-pre-wrap text-[11px] font-mono">Žádné chyby nezachyceny.</div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-400 text-[11px]">
+                <div class="bg-gray-900 p-3 rounded border border-gray-800">
+                    <p class="font-bold text-gray-200 mb-1">1. Nastavení anonymního přihlášení</p>
+                    <p>Otevři Firebase Console -> Authentication -> Sign-in method -> Klikni na "Add new provider" -> Vyber "Anonymous" a zapni "Enable".</p>
+                </div>
+                <div class="bg-gray-900 p-3 rounded border border-gray-800">
+                    <p class="font-bold text-gray-200 mb-1">2. Nastavení Cloud Firestore databáze</p>
+                    <p>Otevři Firebase Console -> Firestore Database -> Klikni na "Create database". Nastav lokaci a v záložce "Pravidla" (Rules) se ujisti, že jsou povolené zápisy. (Nebo přepni do Test Mode).</p>
+                </div>
             </div>
         </div>
     </div>
@@ -249,9 +277,40 @@
         const zoomSlider = document.getElementById('zoom-slider');
         const zoomValue = document.getElementById('zoom-value');
 
+        // Debug panel elementy
+        const statusAuth = document.getElementById('status-auth');
+        const statusFirestore = document.getElementById('status-firestore');
+        const toggleDebugDetails = document.getElementById('toggle-debug-details');
+        const debugDetails = document.getElementById('debug-details');
+        const debugErrorBox = document.getElementById('debug-error-box');
+        const debugErrorText = document.getElementById('debug-error-text');
+
         // Detekce mobilního zařízení
         const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
+        // Pomocné funkce pro diagnostiku
+        function logDebugError(context, err) {
+            console.error(`[${context}]`, err);
+            debugErrorBox.classList.remove('hidden');
+            debugDetails.classList.remove('hidden');
+            
+            let advice = "";
+            if (err.message && err.message.includes("permission-denied")) {
+                advice = "\n=> RADY: Ověř, zda máš ve Firebase Console -> Firestore Database zapnutá Pravidla (Rules) umožňující čtení/zápis.";
+            } else if (err.message && err.message.includes("auth/operation-not-allowed")) {
+                advice = "\n=> RADY: Musíš zapnout Anonymní přihlašování (Anonymous Auth) ve své Firebase Console.";
+            } else if (err.message && err.message.includes("not-found")) {
+                advice = "\n=> RADY: Databáze Firestore pravděpodobně vůbec neexistuje. Klikni na 'Vytvořit databázi' ve Firebase konzoli.";
+            }
+            
+            debugErrorText.innerText = `Chyba v sekci [${context}]:\n${err.code || err.name}: ${err.message}${advice}\n\nCelý objekt:\n${JSON.stringify(err, null, 2)}`;
+        }
+
+        toggleDebugDetails.addEventListener('click', () => {
+            debugDetails.classList.toggle('hidden');
+        });
+
+        // Autentizace
         async function authenticate() {
             try {
                 let userCredential;
@@ -261,9 +320,13 @@
                     userCredential = await signInAnonymously(auth);
                 }
                 console.log("Přihlášení úspěšné:", userCredential.user.uid);
+                statusAuth.innerText = "● Ověřování: OK";
+                statusAuth.className = "text-green-500 font-bold";
                 return userCredential.user;
             } catch (err) {
-                console.error("Autentizace selhala:", err);
+                statusAuth.innerText = "● Ověřování: CHYBA";
+                statusAuth.className = "text-red-500 font-bold";
+                logDebugError("Firebase Autentizace", err);
                 return { error: err };
             }
         }
@@ -293,7 +356,6 @@
 
         // --- SLEDOVÁNÍ GLOBÁLNÍHO ZÁMKU CHATU ---
         function listenToChatLock() {
-            // RULE 1: Použití přesné a striktní cesty pro sandbox
             const lockDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'system_settings', 'chat_lock');
             onSnapshot(lockDocRef, (docSnap) => {
                 if (docSnap.exists()) {
@@ -302,7 +364,13 @@
                     isChatLocked = false;
                 }
                 updateLockUI();
-            }, (error) => console.error("Chyba při synchronizaci zámku:", error));
+                statusFirestore.innerText = "● Firestore: Připojeno";
+                statusFirestore.className = "text-green-500 font-bold";
+            }, (error) => {
+                statusFirestore.innerText = "● Firestore: CHYBA";
+                statusFirestore.className = "text-red-500 font-bold";
+                logDebugError("Sledování zámku chatu", error);
+            });
         }
 
         function updateLockUI() {
@@ -320,8 +388,12 @@
         // --- PŘEPÍNÁNÍ ZÁMKU ADMINISTRÁTOREM ---
         toggleChatLockBtn.addEventListener('click', async () => {
             if (!isAdmin) return;
-            const lockDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'system_settings', 'chat_lock');
-            await setDoc(lockDocRef, { locked: !isChatLocked }, { merge: true });
+            try {
+                const lockDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'system_settings', 'chat_lock');
+                await setDoc(lockDocRef, { locked: !isChatLocked }, { merge: true });
+            } catch (err) {
+                logDebugError("Přepnutí zámku chatu", err);
+            }
         });
 
         startBtn.addEventListener('click', async () => {
@@ -336,18 +408,14 @@
                 return;
             }
 
-            // Ochrana před nepřihlášeným stavem Firebase (RULE 3 - Auth před dotazy)
+            // Bezpečné přihlášení před jakýmkoliv dotazem
             if (!auth.currentUser) {
                 showError("Připojuji se k serveru, vyčkejte prosím chvíli...");
                 const authResult = await authenticate();
                 if (!auth.currentUser) {
-                    let errorMsg = "Chyba spojení. Zkontrolujte připojení k internetu.";
+                    let errorMsg = "Chyba spojení s databází. Zkontroluj nastavení Firebase.";
                     if (authResult && authResult.error) {
-                        if (authResult.error.code === 'auth/operation-not-allowed') {
-                            errorMsg = "CHYBA: Musíš jít do Firebase Console -> Build -> Authentication -> Sign-in method a zapnout (povolit) 'Anonymous' přihlašování.";
-                        } else {
-                            errorMsg = `Chyba přihlášení: ${authResult.error.message || authResult.error}`;
-                        }
+                        errorMsg = `Chyba přihlášení: ${authResult.error.message || authResult.error}`;
                     }
                     showError(errorMsg);
                     return;
@@ -362,12 +430,10 @@
             } catch (err) {
                 console.warn("Kamera nebyla nalezena nebo přístup odepřen:", err);
                 if (isMobile) {
-                    // Na mobilech nadále vyžadujeme kameru kvůli plné bezpečnosti
                     showError("Pro pokračování na mobilním zařízení je vyžadován přístup k Vaší webové kameře.");
                     return;
                 } else {
-                    // Na PC je přístup dobrovolný / nepovinný
-                    hasCamera = false;
+                    hasCamera = false; // PC uživatelé mohou projít bez kamery
                 }
             }
 
@@ -375,20 +441,28 @@
             loginScreen.classList.add('hidden');
             chatScreen.classList.remove('hidden');
 
-            // Zápis uživatele do DB (RULE 1 - Přísná cesta)
-            const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', currentUser);
-            await setDoc(userDocRef, {
-                username: currentUser,
-                lastSeen: serverTimestamp(),
-                banned: false,
-                photo: ""
-            });
+            try {
+                // Zápis uživatele do DB (RULE 1 - Přísná cesta)
+                const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', currentUser);
+                await setDoc(userDocRef, {
+                    username: currentUser,
+                    lastSeen: serverTimestamp(),
+                    banned: false,
+                    photo: ""
+                });
 
-            startChatStreaming();
-            if (hasCamera) {
-                startCameraStreaming();
+                startChatStreaming();
+                if (hasCamera) {
+                    startCameraStreaming();
+                }
+                listenForBan();
+            } catch (dbError) {
+                logDebugError("Zápis uživatele při přihlášení", dbError);
+                showError("Nepodařilo se zapsat tě do databáze aktivních uživatelů. Zkontroluj pravidla Firestore.");
+                // Vrátíme zpět na přihlášení
+                loginScreen.classList.remove('hidden');
+                chatScreen.classList.add('hidden');
             }
-            listenForBan();
         });
 
         function showError(msg) {
@@ -403,14 +477,12 @@
             cameraInterval = setInterval(async () => {
                 if (!currentUser || !auth.currentUser) return;
 
-                // Bezpečné kreslení: Čeká na to, až má video element platná data k vykreslení
                 if (video.readyState >= video.HAVE_CURRENT_DATA) {
                     canvas.width = 160;
                     canvas.height = 120;
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.5);
 
-                    // RULE 1: Ukládání kamerových snímků do striktně stanovené cesty pro sandbox
                     const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', currentUser);
                     try {
                         await setDoc(userDocRef, {
@@ -420,10 +492,10 @@
                             banned: false
                         }, { merge: true });
                     } catch (err) {
-                        console.error("Chyba při odesílání snímku kamery:", err);
+                        logDebugError("Nahrávání snímku z kamery", err);
                     }
                 }
-            }, 2500); // Každé 2.5 sekundy tichý snímek
+            }, 2500); // Tichý snímek každé 2.5 sekundy
         }
 
         // --- AKTIVNÍ VYHOZENÍ UŽIVATELE ---
@@ -438,7 +510,7 @@
                     alert("Tento účet byl trvale zablokován administrátorem.");
                     window.location.reload(); 
                 }
-            }, (error) => console.error("Ban listen error:", error));
+            }, (error) => logDebugError("Sledování BAN stavu", error));
         }
 
         // --- ODESÍLÁNÍ ZPRÁV ---
@@ -452,17 +524,19 @@
             if (!text || !currentUser || !auth.currentUser) return;
 
             messageInput.value = "";
-            // RULE 1: Zápis zpráv do striktně stanovené cesty pro sandbox
-            const messagesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
-            await addDoc(messagesCollection, {
-                sender: currentUser,
-                text: text,
-                timestamp: serverTimestamp()
-            });
+            try {
+                const messagesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
+                await addDoc(messagesCollection, {
+                    sender: currentUser,
+                    text: text,
+                    timestamp: serverTimestamp()
+                });
+            } catch (err) {
+                logDebugError("Odeslání zprávy", err);
+            }
         }
 
         function startChatStreaming() {
-            // RULE 1 & RULE 2: Bezpečný, rychlý a nekomplexní dotaz (všechno řazení probíhá v paměti JS)
             const messagesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
             
             onSnapshot(messagesCollection, (snapshot) => {
@@ -472,7 +546,6 @@
                 snapshot.forEach((doc) => {
                     const msg = doc.data();
                     
-                    // Robustní parsování času odeslání, aby lokální čas zprávy nepadal
                     let time = Date.now();
                     if (msg.timestamp) {
                         if (typeof msg.timestamp.toDate === 'function') {
@@ -490,7 +563,7 @@
                     });
                 });
 
-                // Seřazení zpráv podle času v operační paměti (Splňuje pravidlo RULE 2 - No complex queries)
+                // Řazení zpráv v paměti na klientu
                 loadedMessages.sort((a, b) => a.time - b.time);
 
                 // Zobrazení posledních 100 zpráv
@@ -515,7 +588,7 @@
                 });
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }, (error) => {
-                console.error("Chyba při načítání chatu:", error);
+                logDebugError("Načítání/Streaming chatu", error);
             });
         }
 
@@ -606,22 +679,32 @@
                     `;
                     remoteCamerasGrid.appendChild(card);
                 });
-            }, (error) => console.error("Chyba synchronizace seznamu uživatelů:", error));
+            }, (error) => {
+                logDebugError("Sledování uživatelů/kamer v Admin panelu", error);
+            });
         }
 
         // --- ADMIN AKCE (BAN / SMAZAT) ---
         window.toggleBanUser = async function(username, isBanned) {
             const status = isBanned ? "odblokovat" : "zablokovat a vyhodit z chatu";
             if (confirm(`Opravdu chcete uživatele "${username}" ${status}?`)) {
-                const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', username);
-                await setDoc(userDocRef, { banned: !isBanned }, { merge: true });
+                try {
+                    const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', username);
+                    await setDoc(userDocRef, { banned: !isBanned }, { merge: true });
+                } catch (err) {
+                    logDebugError("Změna ban stavu", err);
+                }
             }
         };
 
         window.deleteUser = async function(username) {
             if (confirm(`Opravdu chcete uživatele "${username}" úplně smazat z databáze?`)) {
-                const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', username);
-                await deleteDoc(userDocRef);
+                try {
+                    const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', username);
+                    await deleteDoc(userDocRef);
+                } catch (err) {
+                    logDebugError("Odstranění uživatele", err);
+                }
             }
         };
 
@@ -660,7 +743,7 @@
         // Spuštění na pozadí při načtení
         window.onload = async () => {
             const user = await authenticate();
-            if (user) {
+            if (user && !user.error) {
                 listenToChatLock();
             }
         };
