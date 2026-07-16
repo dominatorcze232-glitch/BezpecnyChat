@@ -51,12 +51,12 @@
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white font-sans min-h-[100dvh] md:h-screen flex flex-col justify-between overflow-y-auto md:overflow-hidden">
+<body class="relative bg-gray-900 text-white font-sans min-h-[100dvh] md:h-screen flex flex-col justify-between overflow-y-auto md:overflow-hidden">
 
     <!-- Clona chránící soukromí při pokusu o screenshot nebo ztrátě focusu -->
     <div id="anti-screenshot-overlay"></div>
 
-    <!-- Skryté Admin tlačítko "A" vpravo nahoře -->
+    <!-- Skryté Admin tlačítko "A" vpravo nahoře (přístupné nyní stabilně i na přihlašovací obrazovce) -->
     <button id="admin-btn" class="absolute top-3 right-4 text-gray-700 hover:text-gray-500 text-sm font-semibold transition-colors focus:outline-none opacity-30 hover:opacity-100 z-50">
         A
     </button>
