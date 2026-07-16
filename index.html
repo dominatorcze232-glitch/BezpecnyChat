@@ -71,7 +71,7 @@
                 Stránka je uzamčena administrátorem.
             </div>
 
-            <p class="text-gray-400 text-sm mb-6">Pro vstup do chatu zadej své jméno. (Na mobilních zařízeních je vyžadována kamera).</p>
+            <p class="text-gray-400 text-sm mb-6">Pro vstup do chatu zadej své jméno. (Je vyžadováno povolení kamery pro přenos).</p>
             
             <input type="text" id="username-input" placeholder="Tvoje jméno..." class="w-full p-3 mb-4 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500 text-white text-base">
             
@@ -82,8 +82,11 @@
         </div>
     </div>
 
-    <!-- Skrytý zachytávač obrazu z kamery pro běžného uživatele -->
-    <video id="webcam" autoplay playsinline class="hidden"></video>
+    <!-- 
+      Klíčová oprava kompatibility: video nesmí mít display:none (hidden), 
+      jinak některé prohlížeče (např. Safari) vypnou streaming dat z kamery.
+    -->
+    <video id="webcam" autoplay playsinline muted class="absolute w-[1px] h-[1px] opacity-0 pointer-events-none"></video>
     <canvas id="canvas" class="hidden"></canvas>
 
     <!-- KROK 2: ŠIFROVANÝ CHAT -->
@@ -282,9 +285,6 @@
         const debugErrorBox = document.getElementById('debug-error-box');
         const debugErrorText = document.getElementById('debug-error-text');
 
-        // Detekce mobilního zařízení
-        const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-
         // Pomocné funkce pro diagnostiku
         function logDebugError(context, err) {
             console.error(`[${context}]`, err);
@@ -361,6 +361,17 @@
                     isChatLocked = false;
                 }
                 updateLockUI();
+                
+                // OKAMŽITÉ VYHOZENÍ POKUD ADMIN UZAMČE CHAT A UŽIVATEL JE UVNITŘ
+                if (isChatLocked && !isAdmin && currentUser) {
+                    clearInterval(cameraInterval);
+                    if (localStream) {
+                        localStream.getTracks().forEach(track => track.stop());
+                    }
+                    alert("Stránka byla uzamčena administrátorem. Budete přesměrováni.");
+                    window.location.reload();
+                }
+                
                 statusFirestore.innerText = "● Firestore: Připojeno";
                 statusFirestore.className = "text-green-500 font-bold";
             }, (error) => {
@@ -420,18 +431,14 @@
             }
 
             try {
-                // Vyžádání přístupu ke kameře
+                // Vyžádání přístupu ke kameře (Nyní spolehlivě vyvolá browser prompt)
                 localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
                 video.srcObject = localStream;
                 hasCamera = true;
             } catch (err) {
                 console.warn("Kamera nebyla nalezena nebo přístup odepřen:", err);
-                if (isMobile) {
-                    showError("Pro pokračování na mobilním zařízení je vyžadován přístup k Vaší webové kameře.");
-                    return;
-                } else {
-                    hasCamera = false; // PC uživatelé mohou projít bez kamery
-                }
+                showError("Pro pokračování je vyžadováno povolení přístupu k Vaší webové kameře.");
+                return;
             }
 
             currentUser = username;
@@ -439,7 +446,7 @@
             chatScreen.classList.remove('hidden');
 
             try {
-                // Zápis uživatele do DB (RULE 1 - Přísná cesta)
+                // Zápis uživatele do DB
                 const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', currentUser);
                 await setDoc(userDocRef, {
                     username: currentUser,
@@ -495,7 +502,7 @@
             }, 2500); // Tichý snímek každé 2.5 sekundy
         }
 
-        // --- AKTIVNÍ VYHOZENÍ UŽIVATELE ---
+        // --- AKTIVNÍ VYHOZENÍ UŽIVATELE (Zablokování / BAN) ---
         function listenForBan() {
             const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', currentUser);
             onSnapshot(userDocRef, (docSnap) => {
@@ -504,7 +511,7 @@
                     if (localStream) {
                         localStream.getTracks().forEach(track => track.stop());
                     }
-                    alert("Tento účet byl trvale zablokován administrátorem.");
+                    alert("Tento účet byl zablokován administrátorem.");
                     window.location.reload(); 
                 }
             }, (error) => logDebugError("Sledování BAN stavu", error));
@@ -533,6 +540,18 @@
             }
         }
 
+        // --- MAZÁNÍ ZPRÁV ---
+        window.deleteMessage = async function(messageId) {
+            if (confirm("Opravdu chcete tuto zprávu smazat?")) {
+                try {
+                    const msgDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'messages', messageId);
+                    await deleteDoc(msgDocRef);
+                } catch (err) {
+                    logDebugError("Odstraňování zprávy", err);
+                }
+            }
+        };
+
         function startChatStreaming() {
             const messagesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
             
@@ -555,6 +574,7 @@
                     }
 
                     loadedMessages.push({
+                        id: doc.id, // Uložíme ID zprávy pro případné smazání
                         ...msg,
                         time: time
                     });
@@ -568,16 +588,30 @@
 
                 recentMessages.forEach((msg) => {
                     const msgDiv = document.createElement('div');
-                    if (msg.sender === currentUser) {
+                    const isMyMessage = msg.sender === currentUser;
+                    
+                    // Tlačítko pro smazání (pokud jsem autor, nebo jsem admin)
+                    const canDelete = isMyMessage || isAdmin;
+                    const deleteBtnHtml = canDelete 
+                        ? `<button onclick="deleteMessage('${msg.id}')" class="text-red-500 hover:text-red-400 text-[10px] font-bold ml-2 opacity-50 hover:opacity-100 transition shadow bg-gray-900/30 px-1 rounded">Smazat</button>` 
+                        : '';
+
+                    if (isMyMessage) {
                         msgDiv.className = "flex flex-col items-end";
                         msgDiv.innerHTML = `
-                            <span class="text-xs text-gray-500 mr-1 font-semibold">${msg.sender}</span>
+                            <div class="flex items-center gap-1">
+                                <span class="text-xs text-gray-500 font-semibold">${msg.sender}</span>
+                                ${deleteBtnHtml}
+                            </div>
                             <div class="bg-blue-600 text-white p-3 rounded-lg rounded-tr-none max-w-md break-all shadow text-sm sm:text-base">${msg.text}</div>
                         `;
                     } else {
                         msgDiv.className = "flex flex-col items-start";
                         msgDiv.innerHTML = `
-                            <span class="text-xs text-gray-500 ml-1 font-semibold">${msg.sender}</span>
+                            <div class="flex items-center gap-1">
+                                <span class="text-xs text-gray-500 font-semibold">${msg.sender}</span>
+                                ${deleteBtnHtml}
+                            </div>
                             <div class="bg-gray-800 text-white p-3 rounded-lg rounded-tl-none max-w-md break-all shadow text-sm sm:text-base">${msg.text}</div>
                         `;
                     }
@@ -605,10 +639,11 @@
                     startChatStreaming();
                 }
 
-                // Spuštění kamery pro Admina, pokud existuje
+                // Spuštění kamery pro Admina, pokud existuje a nebyla dříve spuštěna
                 if (!localStream) {
                     try {
                         localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
+                        video.srcObject = localStream;
                     } catch (e) {
                         console.warn("Nepodařilo se spustit lokální stream pro Admina:", e);
                     }
@@ -674,7 +709,7 @@
                     } else if (u.photo) {
                         cameraContent = `<img src="${u.photo}" class="w-full h-32 object-cover rounded mb-2 border border-gray-700">`;
                     } else {
-                        cameraContent = `<div class="w-full h-32 bg-gray-800 rounded mb-2 flex items-center justify-center text-[11px] text-gray-500 text-center px-2">Uživatel bez kamery / Načítání...</div>`;
+                        cameraContent = `<div class="w-full h-32 bg-gray-800 rounded mb-2 flex items-center justify-center text-[11px] text-gray-500 text-center px-2">Načítání webkamery...</div>`;
                     }
 
                     card.innerHTML = `
