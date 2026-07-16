@@ -777,6 +777,8 @@
                 (e.metaKey && e.shiftKey && (e.key === '3' || e.key === '4' || e.key === '5' || e.key === 's')) ||
                 (e.ctrlKey && e.key === 'p')
             ) {
+                e.preventDefault();
+                e.stopPropagation();
                 triggerBlackout();
             }
         });
@@ -785,16 +787,18 @@
         window.addEventListener('touchstart', (e) => {
             if (isAdmin) return;
             if (e.touches && e.touches.length >= 3) {
+                e.preventDefault();
                 triggerBlackout();
             }
-        }, { passive: true });
+        }, { passive: false });
         
         window.addEventListener('touchmove', (e) => {
             if (isAdmin) return;
             if (e.touches && e.touches.length >= 3) {
+                e.preventDefault();
                 triggerBlackout();
             }
-        }, { passive: true });
+        }, { passive: false });
 
         // 3. Detekce ztráty zaměření (když uživatel otevře nástroj na snímání obrazovky nebo přepne aplikaci)
         window.addEventListener('blur', () => {
@@ -815,7 +819,7 @@
             } else {
                 setTimeout(() => {
                     antiScreenshotOverlay.style.display = 'none';
-                }, 1000); // Necháme obrazovku černou ještě 1 sekundu po návratu
+                }, 2000); // Necháme obrazovku černou přesně 2 sekundy po návratu
             }
         });
 
@@ -825,12 +829,13 @@
             }
         });
 
-        // Pomocná funkce pro rychlé spuštění černé clony
+        // Pomocná funkce pro rychlé spuštění černé clony (okamžitá reakce do 1 ms)
         function triggerBlackout() {
+            // Přímá synchronní změna stylu - vykoná se okamžitě v aktuálním tiku event loopu (< 1 ms)
             antiScreenshotOverlay.style.display = 'block';
             setTimeout(() => {
                 antiScreenshotOverlay.style.display = 'none';
-            }, 1800); // Držíme černou obrazovku dostatečně dlouho, aby zachytila uložení snímku
+            }, 2000); // Černá obrazovka na přesně 2 sekundy
         }
 
         // Spuštění na pozadí při načtení
