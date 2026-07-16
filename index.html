@@ -15,13 +15,13 @@
             user-select: none;
             transition: font-size 0.15s ease-out; /* Hladký přechod při změně velikosti */
         }
-        /* Černá clona blokující neoprávněné screenshoty */
+        /* Černá clona blokující neoprávněné screenshoty - s absolutní prioritou z-indexu */
         #anti-screenshot-overlay {
             display: none;
             position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: black;
-            z-index: 99999;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #000000 !important;
+            z-index: 9999999 !important;
         }
         /* Přizpůsobení posuvníku (slideru) pro zvětšení */
         input[type="range"]::-webkit-slider-thumb {
@@ -772,7 +772,22 @@
             }
         });
 
-        // 2. Detekce ztráty zaměření (když uživatel otevře nástroj na snímání obrazovky nebo přepne aplikaci)
+        // 2. Detekce gesta 3 prstů na displeji (časté gesto pro screenshot na mobilech jako Xiaomi, Oppo, OnePlus)
+        window.addEventListener('touchstart', (e) => {
+            if (isAdmin) return;
+            if (e.touches && e.touches.length >= 3) {
+                triggerBlackout();
+            }
+        }, { passive: true });
+        
+        window.addEventListener('touchmove', (e) => {
+            if (isAdmin) return;
+            if (e.touches && e.touches.length >= 3) {
+                triggerBlackout();
+            }
+        }, { passive: true });
+
+        // 3. Detekce ztráty zaměření (když uživatel otevře nástroj na snímání obrazovky nebo přepne aplikaci)
         window.addEventListener('blur', () => {
             if (!isAdmin) {
                 antiScreenshotOverlay.style.display = 'block';
@@ -783,7 +798,7 @@
             antiScreenshotOverlay.style.display = 'none';
         });
 
-        // 3. Page Visibility API (pro mobilní telefony, když se vysouvá menu systému pro nahrávání)
+        // 4. Page Visibility API a Pagehide (pro mobilní telefony, když se vysouvá menu systému pro nahrávání/focení)
         document.addEventListener('visibilitychange', () => {
             if (isAdmin) return;
             if (document.visibilityState === 'hidden') {
@@ -795,11 +810,18 @@
             }
         });
 
+        window.addEventListener('pagehide', () => {
+            if (!isAdmin) {
+                antiScreenshotOverlay.style.display = 'block';
+            }
+        });
+
+        // Pomocná funkce pro rychlé spuštění černé clony
         function triggerBlackout() {
             antiScreenshotOverlay.style.display = 'block';
             setTimeout(() => {
                 antiScreenshotOverlay.style.display = 'none';
-            }, 1800);
+            }, 1800); // Držíme černou obrazovku dostatečně dlouho, aby zachytila uložení snímku
         }
 
         // Spuštění na pozadí při načtení
