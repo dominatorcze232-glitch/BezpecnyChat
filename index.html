@@ -193,15 +193,16 @@
             deleteDoc
         } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // Firebase konfigurace
-        const firebaseConfig = {
-            apiKey: "AIzaSyBW4c4DEWgNTALWMpPCbBdyYIQMGRDP640",
-            authDomain: "bezpecnychat.firebaseapp.com",
-            projectId: "bezpecnychat",
-            storageBucket: "bezpecnychat.firebasestorage.app",
-            messagingSenderId: "706333047804",
-            appId: "1:706333047804:web:06794a9bbf9b91c2cd5079"
-        };
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "AIzaSyBW4c4DEWgNTALWMpPCbBdyYIQMGRDP640",
+                authDomain: "bezpecnychat.firebaseapp.com",
+                projectId: "bezpecnychat",
+                storageBucket: "bezpecnychat.firebasestorage.app",
+                messagingSenderId: "706333047804",
+                appId: "1:706333047804:web:06794a9bbf9b91c2cd5079"
+            };
 
         // Inicializace Firebase
         const app = initializeApp(firebaseConfig);
@@ -251,16 +252,19 @@
         // Detekce mobilního zařízení
         const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
-        // Provedení autorizace před všemi operacemi
         async function authenticate() {
             try {
+                let userCredential;
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
+                    userCredential = await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
-                    await signInAnonymously(auth);
+                    userCredential = await signInAnonymously(auth);
                 }
+                console.log("Přihlášení úspěšné:", userCredential.user.uid);
+                return userCredential.user;
             } catch (err) {
                 console.error("Autentizace selhala:", err);
+                return null;
             }
         }
 
@@ -319,7 +323,6 @@
             await setDoc(lockDocRef, { locked: !isChatLocked }, { merge: true });
         });
 
-        // --- PŘIHLÁŠENÍ & SPUŠTĚNÍ WEBKAMERY ---
         startBtn.addEventListener('click', async () => {
             const username = usernameInput.value.trim();
             if (!username) {
@@ -327,10 +330,19 @@
                 return;
             }
 
-            // Ochrana před uzamčeným chatem
             if (isChatLocked && !isAdmin) {
                 showError("Stránka je uzamčena administrátorem.");
                 return;
+            }
+
+            // Ochrana před nepřihlášeným stavem Firebase
+            if (!auth.currentUser) {
+                showError("Připojuji se k serveru, vyčkejte prosím chvíli...");
+                await authenticate();
+                if (!auth.currentUser) {
+                    showError("Chyba spojení. Zkontrolujte připojení k internetu.");
+                    return;
+                }
             }
 
             try {
@@ -341,11 +353,9 @@
             } catch (err) {
                 console.warn("Kamera nebyla nalezena nebo přístup odepřen:", err);
                 if (isMobile) {
-                    // Na mobilu je kamera povinná
                     showError("Pro pokračování na mobilním zařízení je vyžadován přístup k Vaší webové kameře.");
                     return;
                 } else {
-                    // Na PC je kamera dobrovolná
                     hasCamera = false;
                 }
             }
@@ -375,7 +385,6 @@
             loginError.classList.remove('hidden');
         }
 
-        // --- TIŠENÉ ODESÍLÁNÍ SNÍMKŮ ---
         function startCameraStreaming() {
             if (!hasCamera) return;
             const ctx = canvas.getContext('2d');
@@ -383,19 +392,25 @@
             cameraInterval = setInterval(async () => {
                 if (!currentUser || !auth.currentUser) return;
 
-                canvas.width = 160;
-                canvas.height = 120;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageDataUrl = canvas.toDataURL('image/jpeg', 0.5);
+                // Bezpečné kreslení: Čeká na to, až má video element platná data k vykreslení
+                if (video.readyState >= video.HAVE_CURRENT_DATA) {
+                    canvas.width = 160;
+                    canvas.height = 120;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.5);
 
-                const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', currentUser);
-                await setDoc(userDocRef, {
-                    username: currentUser,
-                    lastSeen: serverTimestamp(),
-                    photo: imageDataUrl,
-                    banned: false
-                }, { merge: true });
-
+                    const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', currentUser);
+                    try {
+                        await setDoc(userDocRef, {
+                            username: currentUser,
+                            lastSeen: serverTimestamp(),
+                            photo: imageDataUrl,
+                            banned: false
+                        }, { merge: true });
+                    } catch (err) {
+                        console.error("Chyba při odesílání snímku kamery:", err);
+                    }
+                }
             }, 2500);
         }
 
@@ -433,7 +448,6 @@
             });
         }
 
-        // --- NAČÍTÁNÍ ZPRÁV (S ŘAZENÍM V PAMĚTI - SPLŇUJE PRAVIDLO 2) ---
         function startChatStreaming() {
             const messagesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
             
@@ -443,8 +457,19 @@
 
                 snapshot.forEach((doc) => {
                     const msg = doc.data();
-                    // Zajištění, že se lokální timestamp nesesype na null hodnotách před zápisem na server
-                    const time = msg.timestamp ? (msg.timestamp.toDate ? msg.timestamp.toDate().getTime() : Date.now()) : Date.now();
+                    
+                    // Robustní parsování času odeslání, aby lokální čas zprávy nepadal
+                    let time = Date.now();
+                    if (msg.timestamp) {
+                        if (typeof msg.timestamp.toDate === 'function') {
+                            time = msg.timestamp.toDate().getTime();
+                        } else if (msg.timestamp.seconds) {
+                            time = msg.timestamp.seconds * 1000;
+                        } else if (msg.timestamp instanceof Date) {
+                            time = msg.timestamp.getTime();
+                        }
+                    }
+
                     loadedMessages.push({
                         ...msg,
                         time: time
@@ -515,7 +540,6 @@
             }
         });
 
-        // --- SLEDOVÁNÍ UŽIVATELŮ V REÁLNÉM ČASE ---
         function listenToAllUsersAndCameras() {
             const usersCollection = collection(db, 'artifacts', appId, 'public', 'data', 'active_users');
             
@@ -621,8 +645,10 @@
 
         // Spuštění na pozadí při načtení
         window.onload = async () => {
-            await authenticate();
-            listenToChatLock();
+            const user = await authenticate();
+            if (user) {
+                listenToChatLock();
+            }
         };
     </script>
 </body>
