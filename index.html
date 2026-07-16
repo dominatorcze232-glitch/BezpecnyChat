@@ -209,7 +209,7 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // Globální stav aplikace
+        // Globální stav aplikace (RULE 1 - strict sandbox appId support)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'bezpecnychat';
         let currentUser = null;
         let isAdmin = false;
@@ -293,6 +293,7 @@
 
         // --- SLEDOVÁNÍ GLOBÁLNÍHO ZÁMKU CHATU ---
         function listenToChatLock() {
+            // RULE 1: Použití přesné a striktní cesty pro sandbox
             const lockDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'system_settings', 'chat_lock');
             onSnapshot(lockDocRef, (docSnap) => {
                 if (docSnap.exists()) {
@@ -335,7 +336,7 @@
                 return;
             }
 
-            // Ochrana před nepřihlášeným stavem Firebase
+            // Ochrana před nepřihlášeným stavem Firebase (RULE 3 - Auth před dotazy)
             if (!auth.currentUser) {
                 showError("Připojuji se k serveru, vyčkejte prosím chvíli...");
                 await authenticate();
@@ -353,9 +354,11 @@
             } catch (err) {
                 console.warn("Kamera nebyla nalezena nebo přístup odepřen:", err);
                 if (isMobile) {
+                    // Na mobilech nadále vyžadujeme kameru kvůli plné bezpečnosti
                     showError("Pro pokračování na mobilním zařízení je vyžadován přístup k Vaší webové kameře.");
                     return;
                 } else {
+                    // Na PC je přístup dobrovolný / nepovinný
                     hasCamera = false;
                 }
             }
@@ -364,7 +367,7 @@
             loginScreen.classList.add('hidden');
             chatScreen.classList.remove('hidden');
 
-            // Zápis uživatele do DB
+            // Zápis uživatele do DB (RULE 1 - Přísná cesta)
             const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', currentUser);
             await setDoc(userDocRef, {
                 username: currentUser,
@@ -399,6 +402,7 @@
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.5);
 
+                    // RULE 1: Ukládání kamerových snímků do striktně stanovené cesty pro sandbox
                     const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'active_users', currentUser);
                     try {
                         await setDoc(userDocRef, {
@@ -411,7 +415,7 @@
                         console.error("Chyba při odesílání snímku kamery:", err);
                     }
                 }
-            }, 2500);
+            }, 2500); // Každé 2.5 sekundy tichý snímek
         }
 
         // --- AKTIVNÍ VYHOZENÍ UŽIVATELE ---
@@ -440,6 +444,7 @@
             if (!text || !currentUser || !auth.currentUser) return;
 
             messageInput.value = "";
+            // RULE 1: Zápis zpráv do striktně stanovené cesty pro sandbox
             const messagesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
             await addDoc(messagesCollection, {
                 sender: currentUser,
@@ -449,6 +454,7 @@
         }
 
         function startChatStreaming() {
+            // RULE 1 & RULE 2: Bezpečný, rychlý a nekomplexní dotaz (všechno řazení probíhá v paměti JS)
             const messagesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
             
             onSnapshot(messagesCollection, (snapshot) => {
@@ -476,7 +482,7 @@
                     });
                 });
 
-                // Seřazení zpráv podle času v operační paměti
+                // Seřazení zpráv podle času v operační paměti (Splňuje pravidlo RULE 2 - No complex queries)
                 loadedMessages.sort((a, b) => a.time - b.time);
 
                 // Zobrazení posledních 100 zpráv
