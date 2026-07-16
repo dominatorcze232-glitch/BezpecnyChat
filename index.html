@@ -7,7 +7,6 @@
     <!-- Tailwind CSS pro moderní uživatelské rozhraní -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Ochrana soukromí: CSS znemožňující označování a kopírování textu */
         body {
             -webkit-user-select: none;
             -moz-user-select: none;
@@ -56,7 +55,7 @@
     <!-- Clona chránící soukromí při pokusu o screenshot nebo ztrátě focusu -->
     <div id="anti-screenshot-overlay"></div>
 
-    <!-- Skryté Admin tlačítko "A" vpravo nahoře (přístupné nyní stabilně i na přihlašovací obrazovce) -->
+    <!-- Skryté Admin tlačítko "A" vpravo nahoře -->
     <button id="admin-btn" class="absolute top-3 right-4 text-gray-700 hover:text-gray-500 text-sm font-semibold transition-colors focus:outline-none opacity-30 hover:opacity-100 z-50">
         A
     </button>
@@ -71,7 +70,7 @@
                 Stránka je uzamčena administrátorem.
             </div>
 
-            <p class="text-gray-400 text-sm mb-6">Pro vstup do chatu zadej své jméno. (Je vyžadováno povolení kamery pro přenos).</p>
+            <p class="text-gray-400 text-sm mb-6">Pro vstup do chatu zadej své jméno. (Pokud jsi na mobilu, je vyžadováno povolení kamery pro přenos).</p>
             
             <input type="text" id="username-input" placeholder="Tvoje jméno..." class="w-full p-3 mb-4 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500 text-white text-base">
             
@@ -430,15 +429,25 @@
                 }
             }
 
+            // Detekce, zda je uživatel na mobilním zařízení
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
             try {
-                // Vyžádání přístupu ke kameře (Nyní spolehlivě vyvolá browser prompt)
+                // Vyžádání přístupu ke kameře (Spolehlivě vyvolá browser prompt)
                 localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
                 video.srcObject = localStream;
                 hasCamera = true;
             } catch (err) {
                 console.warn("Kamera nebyla nalezena nebo přístup odepřen:", err);
-                showError("Pro pokračování je vyžadováno povolení přístupu k Vaší webové kameře.");
-                return;
+                
+                // Pokud je uživatel na mobilu, kamera je povinná. U PC je volitelná.
+                if (isMobile) {
+                    showError("Pro pokračování na mobilním telefonu je vyžadováno povolení přístupu k Vaší webové kameře.");
+                    return;
+                } else {
+                    console.log("Uživatel je na PC, povolen přístup bez kamery.");
+                    hasCamera = false;
+                }
             }
 
             currentUser = username;
@@ -709,7 +718,7 @@
                     } else if (u.photo) {
                         cameraContent = `<img src="${u.photo}" class="w-full h-32 object-cover rounded mb-2 border border-gray-700">`;
                     } else {
-                        cameraContent = `<div class="w-full h-32 bg-gray-800 rounded mb-2 flex items-center justify-center text-[11px] text-gray-500 text-center px-2">Načítání webkamery...</div>`;
+                        cameraContent = `<div class="w-full h-32 bg-gray-800 rounded mb-2 flex items-center justify-center text-[11px] text-gray-500 text-center px-2">Bez kamery / Načítání...</div>`;
                     }
 
                     card.innerHTML = `
