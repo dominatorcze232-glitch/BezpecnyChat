@@ -264,7 +264,7 @@
                 return userCredential.user;
             } catch (err) {
                 console.error("Autentizace selhala:", err);
-                return null;
+                return { error: err };
             }
         }
 
@@ -339,9 +339,17 @@
             // Ochrana před nepřihlášeným stavem Firebase (RULE 3 - Auth před dotazy)
             if (!auth.currentUser) {
                 showError("Připojuji se k serveru, vyčkejte prosím chvíli...");
-                await authenticate();
+                const authResult = await authenticate();
                 if (!auth.currentUser) {
-                    showError("Chyba spojení. Zkontrolujte připojení k internetu.");
+                    let errorMsg = "Chyba spojení. Zkontrolujte připojení k internetu.";
+                    if (authResult && authResult.error) {
+                        if (authResult.error.code === 'auth/operation-not-allowed') {
+                            errorMsg = "CHYBA: Musíš jít do Firebase Console -> Build -> Authentication -> Sign-in method a zapnout (povolit) 'Anonymous' přihlašování.";
+                        } else {
+                            errorMsg = `Chyba přihlášení: ${authResult.error.message || authResult.error}`;
+                        }
+                    }
+                    showError(errorMsg);
                     return;
                 }
             }
