@@ -43,6 +43,12 @@
                 -webkit-overflow-scrolling: touch;
             }
         }
+        /* OCHRANA PROTI TISKU A UKLÁDÁNÍ DO PDF */
+        @media print {
+            body {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white font-sans min-h-[100dvh] md:h-screen flex flex-col justify-between overflow-y-auto md:overflow-hidden">
@@ -160,21 +166,13 @@
         <!-- ZÁLOŽKA: WEB KAMERY -->
         <div id="admin-cameras-view" class="hidden">
             <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
-                <!-- Adminův lokální náhled (Admin vidí sám sebe) -->
-                <div class="bg-gray-900 p-2 rounded border border-red-900 flex flex-col items-center relative group">
-                    <div class="w-full h-32 bg-black rounded mb-2 overflow-hidden relative">
-                        <video id="admin-local-video" autoplay playsinline muted class="w-full h-full object-cover scale-x-[-1]"></video>
-                        <span class="absolute top-1.5 left-1.5 bg-red-600 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow">Ty (Admin)</span>
-                    </div>
-                    <span class="text-xs text-gray-400 font-semibold truncate w-full text-center">Moje kamera</span>
-                </div>
-                <!-- Kamery ostatních uživatelů -->
+                <!-- Kamery uživatelů se budou vykreslovat sem (včetně adminovy vlastní) -->
                 <div id="remote-cameras-grid" class="contents"></div>
             </div>
         </div>
     </div>
 
-    <!-- DIAGNOSTICKÝ PANEL (POMOCNÍK PŘI CHYBÁCH FIREBASE) -->
+    <!-- DIAGNOSTICKÝ PANEL -->
     <div id="debug-panel" class="bg-gray-950 border-t border-yellow-600/30 text-xs p-3 font-mono text-gray-300 w-full select-text">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
             <div class="flex flex-wrap items-center gap-4">
@@ -237,7 +235,7 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // Globální stav aplikace (RULE 1 - strict sandbox appId support)
+        // Globální stav aplikace
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'bezpecnychat';
         let currentUser = null;
         let isAdmin = false;
@@ -269,7 +267,6 @@
         const tabCamerasBtn = document.getElementById('tab-cameras-btn');
         const adminUsersView = document.getElementById('admin-users-view');
         const adminCamerasView = document.getElementById('admin-cameras-view');
-        const adminLocalVideo = document.getElementById('admin-local-video');
         const remoteCamerasGrid = document.getElementById('remote-cameras-grid');
         const usersTableBody = document.getElementById('users-table-body');
 
@@ -599,7 +596,7 @@
                 isAdmin = true;
                 adminBadge.classList.remove('hidden');
                 adminPanel.classList.remove('hidden');
-                alert("Úspěšně ověřeno. Vítejte v administraci.");
+                alert("Úspěšně ověřeno. Vítejte v administraci. (Ochrana proti screenshotům je pro vás nyní vypnuta).");
 
                 if (!currentUser) {
                     currentUser = "Admin";
@@ -615,9 +612,6 @@
                     } catch (e) {
                         console.warn("Nepodařilo se spustit lokální stream pro Admina:", e);
                     }
-                }
-                if (localStream) {
-                    adminLocalVideo.srcObject = localStream;
                 }
 
                 listenToAllUsersAndCameras();
@@ -636,35 +630,48 @@
 
                 snapshot.forEach((userDoc) => {
                     const u = userDoc.data();
-                    if (u.username === currentUser) return; // Nezobrazovat sebe v seznamu
+                    const isMe = u.username === currentUser;
 
                     // VYKRESLENÍ TABULKY UŽIVATELŮ
                     const tr = document.createElement('tr');
                     tr.className = "hover:bg-gray-950 transition border-b border-gray-800 text-sm sm:text-base";
                     tr.innerHTML = `
-                        <td class="p-3 font-semibold text-gray-200">${u.username}</td>
+                        <td class="p-3 font-semibold text-gray-200">
+                            ${u.username} ${isMe ? '<span class="text-xs text-blue-400 ml-1">(Ty)</span>' : ''}
+                        </td>
                         <td class="p-3">
                             <span class="px-2 py-0.5 rounded text-[11px] font-bold tracking-wide ${u.banned ? 'bg-red-900 text-red-200 border border-red-700' : 'bg-green-900 text-green-200 border border-green-700'}">
                                 ${u.banned ? 'ZABLOKOVÁN' : 'AKTIVNÍ'}
                             </span>
                         </td>
                         <td class="p-3 text-right space-x-1">
-                            <button onclick="toggleBanUser('${u.username}', ${u.banned})" class="bg-yellow-600 hover:bg-yellow-500 text-xs px-2.5 py-1 rounded font-bold transition">
-                                ${u.banned ? 'Odblokovat' : 'Zablokovat'}
-                            </button>
-                            <button onclick="deleteUser('${u.username}')" class="bg-red-600 hover:bg-red-500 text-xs px-2.5 py-1 rounded font-bold transition">
-                                Smazat
-                            </button>
+                            ${isMe ? '<span class="text-xs text-gray-500">Bez akce</span>' : `
+                                <button onclick="toggleBanUser('${u.username}', ${u.banned})" class="bg-yellow-600 hover:bg-yellow-500 text-xs px-2.5 py-1 rounded font-bold transition">
+                                    ${u.banned ? 'Odblokovat' : 'Zablokovat'}
+                                </button>
+                                <button onclick="deleteUser('${u.username}')" class="bg-red-600 hover:bg-red-500 text-xs px-2.5 py-1 rounded font-bold transition">
+                                    Smazat
+                                </button>
+                            `}
                         </td>
                     `;
                     usersTableBody.appendChild(tr);
 
                     // VYKRESLENÍ ZÁLOŽKY WEB KAMERY
                     const card = document.createElement('div');
-                    card.className = "bg-gray-900 p-2 rounded border border-gray-800 flex flex-col items-center relative overflow-hidden group";
+                    card.className = `bg-gray-900 p-2 rounded border ${isMe ? 'border-blue-900' : 'border-gray-800'} flex flex-col items-center relative overflow-hidden group`;
 
                     let cameraContent;
-                    if (u.photo) {
+                    if (isMe) {
+                        // Pokud jsem to já (admin), zobrazím svůj přímý plynulý stream
+                        cameraContent = `<video autoplay playsinline muted class="w-full h-32 object-cover rounded mb-2 scale-x-[-1] bg-black" id="remote-local-preview"></video>`;
+                        setTimeout(() => {
+                            const previewVid = document.getElementById('remote-local-preview');
+                            if (previewVid && localStream) {
+                                previewVid.srcObject = localStream;
+                            }
+                        }, 100);
+                    } else if (u.photo) {
                         cameraContent = `<img src="${u.photo}" class="w-full h-32 object-cover rounded mb-2 border border-gray-700">`;
                     } else {
                         cameraContent = `<div class="w-full h-32 bg-gray-800 rounded mb-2 flex items-center justify-center text-[11px] text-gray-500 text-center px-2">Uživatel bez kamery / Načítání...</div>`;
@@ -673,7 +680,7 @@
                     card.innerHTML = `
                         <div class="w-full relative">
                             ${cameraContent}
-                            ${u.photo ? '<span class="absolute top-1.5 left-1.5 bg-green-600 text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow animate-pulse">Přenos</span>' : ''}
+                            ${isMe ? '<span class="absolute top-1.5 left-1.5 bg-blue-600 text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow">Ty (Admin)</span>' : (u.photo ? '<span class="absolute top-1.5 left-1.5 bg-green-600 text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow animate-pulse">Přenos</span>' : '')}
                         </div>
                         <span class="text-xs text-gray-300 font-semibold truncate w-full text-center mt-1">${u.username}</span>
                     `;
@@ -708,7 +715,9 @@
             }
         };
 
-        // --- ANTI-SCREENSHOT SYSTEM ---
+        // --- MAXIMUM ANTI-SCREENSHOT SYSTEM ---
+        
+        // 1. Záchyt běžných kláves a kombinací
         window.addEventListener('keyup', (e) => {
             if (isAdmin) return;
             if (e.key === 'PrintScreen' || (e.key === 'p' && e.ctrlKey)) {
@@ -718,11 +727,17 @@
 
         window.addEventListener('keydown', (e) => {
             if (isAdmin) return;
-            if ((e.metaKey || e.ctrlKey) && (e.key === 'p' || e.key === 's' || e.key === '3' || e.key === '4')) {
+            // Zachytí Windows: Win+Shift+S, PrtScn | Mac: Cmd+Shift+3, Cmd+Shift+4, Cmd+Shift+5
+            if (
+                e.key === 'PrintScreen' || 
+                (e.metaKey && e.shiftKey && (e.key === '3' || e.key === '4' || e.key === '5' || e.key === 's')) ||
+                (e.ctrlKey && e.key === 'p')
+            ) {
                 triggerBlackout();
             }
         });
 
+        // 2. Detekce ztráty zaměření (když uživatel otevře nástroj na snímání obrazovky nebo přepne aplikaci)
         window.addEventListener('blur', () => {
             if (!isAdmin) {
                 antiScreenshotOverlay.style.display = 'block';
@@ -731,6 +746,18 @@
 
         window.addEventListener('focus', () => {
             antiScreenshotOverlay.style.display = 'none';
+        });
+
+        // 3. Page Visibility API (pro mobilní telefony, když se vysouvá menu systému pro nahrávání)
+        document.addEventListener('visibilitychange', () => {
+            if (isAdmin) return;
+            if (document.visibilityState === 'hidden') {
+                antiScreenshotOverlay.style.display = 'block';
+            } else {
+                setTimeout(() => {
+                    antiScreenshotOverlay.style.display = 'none';
+                }, 1000); // Necháme obrazovku černou ještě 1 sekundu po návratu
+            }
         });
 
         function triggerBlackout() {
